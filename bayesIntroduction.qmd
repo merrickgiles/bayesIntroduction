@@ -1,0 +1,694 @@
+---
+title: "An Overview of Bayesian Statistics"
+subtitle: "From heads or tails to measures of human reasoning"
+author: "Merrick Giles"
+format: 
+  html:
+    toc: true
+    toc-location: right
+    toc-depth: 2 
+    fig-align: center
+    embed-resources: true
+editor: visual
+execute: 
+    warning: false
+---
+
+```{r}
+library(tidyverse)
+library(patchwork)
+source(here::here("utilities.R"))
+set.seed(3000)
+
+# some nice colours
+matcha = "#86A697"
+ocean = "#2E5C6E"
+haze = "#8F77B5"
+sand = "#e0cda9"
+dust = "#9E8472"
+forest = "#a0ae9b"
+lake = "#6B8093"
+blood = "#800000"
+```
+
+ 
+
+## Observation & Probability
+
+On reflection, I really have quite a poor understanding of how heads or tails works. All I know is that a coin flips into the air, something happens with the air and the spin of the coin and the coins weight and the earths gravitational pull, and it ends up landing heads or tails.
+
+Despite my ignorance, I can still set up a model to capture my general understanding of a coin flip. In particular, I can use a *probabilistic* model. In the language of probability, a coin flip is a draw from a Bernoulli distribution centred at 0.5. A Bernoulli distribution represents a single random outcome.
+
+$$X \sim \mathcal{Bernoulli}(p = 0.5)$$
+
+Below, I can represent this model as code in R. Heads are coded as 1, and tails are coded as 0. Here,
+
+```{r}
+#| fig-width: 3
+#| fig-height: 3
+#| fig-align: "center"
+
+# this is the model
+coin_flip <- rbinom(n=1, size = 1, prob = 0.5)
+
+# this is just plotting
+ggplot(data.frame(coin_flip), aes(x = coin_flip)) +
+geom_bar(fill = matcha) +
+scale_x_continuous(breaks=seq(0, 1, by = 1), limits = c(-0.5, 1.5)) +
+scale_y_continuous(breaks=seq(0, 1, by = 1)) +
+labs(x="0 = Tails, 1 = Heads", y = "Number of Trials") +
+theme_bw() +
+my_theme()
+```
+
+Heads.
+
+I can use my model to see what would happen if someone flipped a coin 1000 times. This requires an extension of the Bernoulli to multiple trials, called the Binomial. The Binomial is a distribution representing multiple random outcomes.
+
+$$X \sim \mathcal{Binomial(n=1000, p = 0.5)}$$
+
+```{r}
+#| fig-width: 3
+#| fig-height: 3
+#| fig-align: "center"
+
+# this is the model
+thousand_coin_flips <- rbinom(n=1000, size = 1, prob = 0.5)
+
+# this is just plotting
+thousand_flips_plot <- ggplot(data.frame(thousand_coin_flips), aes(x = thousand_coin_flips)) +
+geom_bar(fill = matcha) +
+scale_x_continuous(breaks=seq(0, 1, by = 1)) +
+labs(x="0 = Tails, 1 = Heads", y = "Number of Trials") +
+theme_bw() +
+my_theme()
+
+thousand_flips_plot
+```
+
+Imagine I go out into the world and I flip a coin 1000 times. Every time I get heads, I put 1 into my spreadsheet, and every time I get tails, I put 0 into my spreadsheet. If I was to plot the number of heads and tails, it would look almost exactly the same as the plot I just made with my model. My model pretty much perfectly captures the data.
+
+My model performs well, despite encoding basically no information about the world. It says nothing about the nerves that fire from the brain all the way down to the finger of the person flipping the coin. It says nothing about the tension between their thumb and pointer that determines the force at which the coin left their hand. It says nothing about the aerodynamics of the environment in which the coin was flipped, about the interaction between atmospheric density, coin weight, and the earths gravitational pull... and so on.
+
+No, my model just randomly picks a 0 or a 1 with a 50/50 chance. And yet... my model captures the behaviour of a coin almost perfectly. No physiology or physics needed.
+
+Why, then, did my model work so well?
+
+Obviously there's a boring reason, which is that I already know the probability of heads or tails was 50/50, from my experiences of seeing coins flipped (and from what people have told me).
+
+But there is also a more subtle reason: it's is because our observations weren't objective. When we probe the environment to make an observation or do some experiment, we attend to certain elements of the environment that we decided to care about, and ignore other elements that we decided not to care about. In this sense, no empirical observation is neutral; it is always guided by some, often implicit, theoretical perspective that tells the scientist what to look at, and what to ignore. We chose to look only at the count of heads vs. tails, and ignore all the rest. Consequently, our model is not very well suited to capturing the full, complex state of the world, but it is well suited to what we chose to observe. It is worth our while to internalise, at the outset, that our procedure for interrogating the phenomenon of interest is far from unbiased, objective observation. We are always tailoring our observations based on our perspective, paying close attention to some parts of the phenomenon and ignoring others.
+
+While we will never escape our lack of objectivity, some models are better or worse at approximating the complete set of complex causes that statisticians call the *data generating process*. Because of how complex the world is, we will never reach the 'true' data generating process (if we even assume the existence of a 'true' data generating process). However, some models are better or worse at incorporating the more intricate and complex phenomena that give rise to experimental observations. It is worth emphasising that the statistical models under consideration *here* aren't very good at modelling such complex phenomena. They are only really capable of capturing broad-level trends, like the probability of heads or overall differences between groups of people. We shouldn't forget while these statistics can be very effective at capturing the broad-level trends that interest us for this project, we know very little about the complex causes that actually produce the data we are looking at.
+
+Since we're stuck looking at broad-level trends like overall group level differences and such, why don't we make the most of them? How do we understand these trends in the best way we can?
+
+ 
+
+## Bayesian Inference
+
+One influential answer is to use the tools of Bayesian Inference. At it's core, Bayesian Inference just gives us a logically coherent way to update our beliefs. The hardest thing to grasp is that we can express our beliefs as probability distributions. Initially, before seeing any data, we create a function that maps possible states of the world to our degree of belief in those states. To create that function we use one of the classic functions in probability, such as a Normal distribution. Once we express our initial beliefs as probability distributions, we use a law of probability called *Bayes Rule* to determine how we *should* update our beliefs in light of new observations – in light of data we collect. As a result, beliefs that are more consistent with our observations are allocated more probability, and those less consistent are allocated less.
+
+Updating our beliefs-as-probability-distributions sounds like complicated work, but it's actually very simple with Bayes Rule. It works like this:
+
+$$P(h) \text{ and } P(D|h) \rightarrow P(h|D) $$
+
+At the highest level, this just says that to evaluate how much we should believe in some hypothesis, we combine two things:
+
+1.  Our initial belief in the hypothesis before seeing any data, $P(h)$
+2.  How well our data can be explained by the hypothesis, $P(D|h)$
+
+What is 'the hypothesis', $h$ in the above? The answer is literally anything you want. But in this overview, and in most general-purpose statistical models, the hypothesis is a value: it will be either a) a mean, or b) a proportion. In essence, we evaluate each mean or proportion that we initially allocated some degree of belief to, and we look at how probable those means or proportions are, in light of the data, *and* in light of our initial degree of belief in them.
+
+So imagine we're looking at the mean response time difference between two groups. We say: the mean difference between the two groups is is between 0 and 1. The mean falls anywhere in that range (it could be 0.10, 0.50, 0.90... etc). To evaluate the mean difference using Bayes Rule, we check each possible value in the range, combining our initial beliefs and how consistent the data is with that value. For example:
+
+What's my initial belief that the mean is 0? (0.001). What's the probability of the observed Response Time difference between the groups given that the mean is 0? (0.002). So combining them, my degree of belief that the mean is 0 is 0.000002 (0.001 $\times$ 0.002). What's my initial belief that the mean is 0.01? (0.002). What's the probability of the observed Response Time difference between the groups given that the mean is 0.001? (0.003)? So combining them, my belief that the mean is 0.01 is 0.000006.
+
+Do the above over and over and over again, for every single value between 0 and 1. When you've looked at every possible mean, you can plot the means you've looked at on the x-axis, and your degree of belief in them on the y-axis. We'll see this soon.
+
+Before I proceed with a more concrete example, we should note that you've likely encountered $P(D|h)$ before: It's the probability of the data given a hypothesis. Only when you last encountered it, you only saw it for one special hypothesis in particular: the probability of the data given the *null* hypothesis (e.g., the probability that some mean difference between groups is 0). It was called a p-value. We're extending it to include any hypothesis. By combining it with our initial beliefs, we get to evaluate the evidence for and against any hypothesis: evidence for the null hypothesis, evidence for the alternative hypothesis, anything.
+
+But yes, let's return to the central premise: we take our initial (prior) belief in some value, and we combine it with the probability of the data given that value (likelihood), to get our final (*posterior)* belief: a logically perfect transition from pre-data to post-data knowledge. Let's go through an example.
+
+## Heads or tails with Bayes
+
+I want you to imagine a scenario: An alien named Mosscap is visiting Earth from a planet called Zeptar. When she lands, she sees some human children flip a coin, ten times. She has no coins on her planet, so this spikes her interest. She notices that the coin has two sides: one with a face (which we call heads) and one with some other picture carved into the metal (which we call tails). She noticed that the coin landed on the face side 3 times, and landed on the opposing side 7 times. She finds this interesting, and asks them to lend her a coin so she can know what proportion of the time the coin lands on the face side. They agree, and she starts planning the coin flipping experiment.
+
+Despite it's aliens and coins, this story is actually pretty close to what's happening in most behavioural experiments. The only real difference is that Mosscap wants to know the difference in proportion between the two coin sides, while we want to know, for example, the difference in accuracy, response time, recall, etc, between two or three groups. Keep that in mind.
+
+### Mosscap's initial degree of belief, or 'priors'
+
+Before Mosscap starts her experiment, she wants to express her initial belief in the proportion of times the coin will land on heads. Remember: she saw the kids flipping the coin. They flipped it 10 times. Since she saw the coin land on heads 3 times, and tails 7 times. So she writes down her initial belief (called the priors): heads has proportion $0.30$ (3/10), and tails as the proportion $0.70 (7/10)$.
+
+But these initial beliefs aren't enough. Remember what I said: we create a function that maps possible states of the world to our degree of belief in those states. And to do this we use a probability distribution (and we call this the prior probability distribution). Two values are *not* a probability distribution: a probability distribution needs to cover a whole range of values, because we need to evaluate all of them.
+
+This may come as a shock to you (you may want to sit down), but before seeing *any* more coin flips, Mosscap can express her belief as a probability distribution, because statisticians have worked this out for her. It's called the $\mathcal{Beta}$ distribution. The Beta distribution sets up a whole range of values, simply from you noting down the number of times you've seen outcome 0 (tails) vs. outcome 1 (heads). The distribution works by assigning the degree of belief over possible proportions between 0 and 1 based on observed rates of 0/1, or heads /tails. For what Mosscap has seen so far, the distribution looks like this:
+
+$$
+\mathcal{Beta}(3, 7)
+$$
+
+In English: In binary outcome trials (heads / tails), I have observed 3 'wins' (heads), and 7 'losses' (tails). Check out the distribution below.
+
+```{r}
+#| fig-width: 4
+#| fig-height: 3
+#| fig-align: "center"
+
+# this is setting up the distribution 
+range = seq(0, 1, by = 0.01)
+moss_prior_flips <- dbeta(range, 3, 7) # this is the distribution part
+plotter <- data.frame(range, moss_prior_flips)
+
+# # this is just plotting
+before_flips <- ggplot(
+  plotter,
+  aes(x = range, y = moss_prior_flips)) +
+geom_line(colour = ocean, alpha = 0.9, size = 1.1) +
+labs(x="Proportion of Heads", y = "Degree of Belief", title = "Initial Beliefs  -  P(h)") +
+theme_bw() +
+my_theme()
+
+before_flips
+```
+
+Going back to what I said: we create a function that maps possible states of the world to our degree of belief in those states. Done! Here, 'states of the world' are possible proportions of heads. 'degree of belief' is just what it sounds like (more exactly, degree of belief is the probability of the proportion being the true proportion of heads).
+
+Sit with this for a moment to understand it. What's our degree of belief that the proportion of heads is 0? Well, 0, because we've seen heads happen. Same with 1: we've seen a 'tails' event - multiple of them. So we can rule that out and set the degree of belief to 0. What's our degree of belief that the proportion of heads is 0.10? Well, we have a fairly high degree of belief, because it's fairly consistent with the data we've seen so far. And our degree of belief that the proportion of heads is 0.30? Well that's where we put the highest degree of belief – because that's most consistent with what we've seen so far.
+
+So there we go! Armed with a few observations and the power of probability, we have our prior probability distribution, $P(h)$. We have the first part of our puzzle, which as you'll recall goes:
+
+$$P(h) \text{ and } P(D|h) \rightarrow P(h|D) $$
+
+At the highest level, this just says that to evaluate how much we should believe in some hypothesis, we combine two things:
+
+1.  Our initial belief in the hypothesis before seeing any data, $P(h)$
+2.  How well our data can be explained by the hypothesis, $P(D|h)$
+
+We have 1. (The prior probability distribution). Let's move to 2.
+
+### Mosscap's experiment
+
+After expressing her initial belief in the probability of heads, Mosscap sits down to do her experiment. She decides that she will test flipping the coin 10 times, by asking each of her friends to flip the coin once for her (she doesn't want to flip the coin herself, because she might unknowingly bias the outcome). She would like to collect more data, but finding participants can be hard, because friends are busy. Anyway, she manages to collect data from her 10 friends, all of which flipped the coin once.
+
+She puts her data into R, and plots the outcome of her experiment. See her data and plot below!
+
+```{r}
+#| fig-align: "center"
+
+moss_data <- data.frame(
+  trial = c(01, 02, 03, 04, 05, 06, 07, 08, 09, 10),
+  outcome = c(1, 1, 0, 
+            0, 1, 1,
+            0, 1, 1, 0) 
+)
+
+moss_data
+```
+
+```{r}
+#| fig-width: 3
+#| fig-height: 3
+#| fig-align: "center"
+ggplot(moss_data, aes(x = outcome)) +
+geom_bar(fill = matcha) +
+scale_x_continuous(breaks=seq(0, 1, by = 1)) +
+labs(x="0 = Tails, 1 = Heads", y = "Number of Trials") +
+theme_bw() +
+my_theme()
+```
+
+Okay. So in her experiment, Mosscap observed 4 tails and 6 heads.
+
+Here's where things get crazy (you may want to sit down one more time). Remember how Mosscap was able to express our initial beliefs as a probability distribution? Well.. it turns out she can also represent our data using a probability distribution. With every type of data you collect, there is a probability distribution that we can create out of it. This is because your data *imply* probabilities. You can probably see this on some level: in the data above, the data is implying that the proportion of heads is around 0.60 (6/10), but it's definitely not implying that the proportion of heads is around 0.20, or 0.10, or 0. Definitely not. Again, thanks to the statisticians, we have a way of assessing this probability of *all* possible proportions of heads.
+
+How do you know which probability distribution to create out of your data? For your Capstone work you won't have to worry about this too much, because our statistical tools will do it for you. Because I myself am quite clever (I am almost a doctor, after all...), I know that the correct distribution to create here out of Mosscaps data is the $\mathcal{Beta}$ distribution, again. Specifically,
+
+$\mathcal{Beta}$(6, 4)
+
+I did it below
+
+```{r}
+#| fig-width: 4
+#| fig-height: 3
+#| fig-align: "center"
+
+moss_data_flips <- dbeta(range, 6, 4)
+plotter <- data.frame(range, moss_data_flips)
+
+data_flips <- ggplot(
+  plotter,
+  aes(x = range, y = moss_data_flips)) +
+geom_line(colour = matcha, alpha = 0.9, size = 1.1) +
+labs(x="Proportion of Heads", y = "Plausibility", title = "The Data Distribution - P(D|h)") +
+theme_bw() +
+my_theme()
+data_flips
+```
+
+So remember 1 second ago when I was talking about how we're creating the probability distribution implied by the data?
+
+Well... what I didn't tell you is that this actually the second piece of our puzzle, $P(D|h)$. You remember our puzzle, right?
+
+$$P(h) \text{ and } P(D|h) \rightarrow P(h|D) $$
+
+At the highest level, this just says that to evaluate how much we should believe in some hypothesis, we combine two things:
+
+1.  Our initial belief in the hypothesis before seeing any data, $P(h)$
+2.  How well our data can be explained by the hypothesis, $P(D|h)$
+
+Why does the distribution we just made (green, above), correspond to how well our data can be explained by the hypothesis (we call this the likelihood)?
+
+Well, let's think through what the distribution is telling us. It's saying: based on the data you gave me, here is the plausibility of the different proportions of heads. Proportion of heads being 0? No, that does not fit with the data at all, I saw 6 heads, not 0. Proportion being 1? No, that also does not fit at all. I saw 4 tails, so that can't be. Proportion of heads being 0.60? Yes! The data fits very well with that proportion indeed.
+
+And that's just it: the probability of the data *given* the hypothesis – *given* the proportion of heads we're looking at. That produces the full distribution of $P(D|h)$ values.
+
+ 
+
+### Using Bayes Rule to determine the proportion of heads
+
+Well. This is all looking very nice. We have our prior degree of belief in the different proportion of heads, which Mosscap got from the children flipping the coins, and which we turned into a full probability distribution (the prior distribution). We also have the probability of the data given different proportions of heads, which we also turned into again probability distribution (the likelihood). That leaves just one thing: combining them both into a final belief, based on everything that we've observed (our prior, and our experiment). We call this the *posterior distribution.*
+
+You probably don't remember this (I think I only presented it once), but did you know that Bayes Rule gives us a way to combine our prior beliefs with the data we observe? It goes like this
+
+$$ P(h) \text{ and } P(D|h) \rightarrow P(h|D) $$
+
+At the highest level, this just says that to evaluate how much we should believe in some hypothesis, we combine two things:
+
+1.  Our initial belief in the hypothesis before seeing any data, $P(h)$
+2.  How well our data can be explained by the hypothesis, $P(D|h)$
+
+This process of combination is really quite intuitive. I'll put them side by side, and I want you to guess where we will end up:
+
+```{r}
+#| fig-width: 8
+#| fig-height: 3
+#| fig-align: "center"
+
+before_flips + data_flips
+```
+
+No, seriously, imagine a distribution that combines both of them. You probably are imagining a distribution right in the centre? So that they balance each other out – putting the final belief around 0.40-0.50? Yup, that's exactly how it works.
+
+Sorry it's underwhelming, but once we have our prior and our data distribution it's all quite straight forward. You don't have to worry about how they're mathematically combined, just trust that it works.
+
+```{r}
+#| fig-width: 11
+#| fig-height: 3
+#| fig-align: "center"
+
+moss_post_flips <- dbeta(range, 9, 11)
+
+combined_flips <- ggplot(
+  plotter,
+  aes(x = range, y = moss_post_flips)) +
+geom_line(colour = haze, alpha = 0.9, size = 1.1) +
+labs(x="Proportion of Heads", y = "Degree of Belief", title = "Final Beliefs - P(h|D)") +
+theme_bw() +
+my_theme()
+
+before_flips + data_flips + combined_flips
+```
+
+That's it! That's our Bayesian analysis. After integrating her prior belief with the data from her experiment, Mosscap's *best* estimate will believe that the proportion of heads is around 0.50. But more than that: she'll have a degree of belief for *every* possible proportion of heads, which is well calibrated to reality. That's the power of Bayes: we don't just get an estimate, we get a degree of belief for every possible proportion. Let's briefly consider two things that happened when we applied the marvellous *Bayes Rule* (i'll spare you the Bayes Rule description this time...).
+
+1.  **Our posterior distribution ended up in the middle of our initial beliefs and data.**
+
+This makes sense! Like I said, we are combining our initial beliefs with the data we observed. Since our belief in the probability of heads was about 0.30 before the experiment, and the experiment suggested the probability of heads was about 0.60, it makes sense that we get an estimate of heads that are mostly between those values.
+
+What will take some getting used to is that we're not just using the best estimate for the proportion of heads. It's very common to think in terms of the 'best estimate', like 'our best estimate of the proportion'. My brain often falls into that pattern. But we're not just getting the best estimate: we're getting a degree of belief in *all* possible proportions. That's the real magic of it, but it does take time to get your head around.
+
+2.  **We got more confident.**
+
+Notice that the purple distribution, representing our final beliefs, is *thinner* than the other two distributions. This is exactly as it should be: our degree of belief in the various possible proportions of heads is spread across a smaller region of proportions. This is natural: we have made more observations (Mosscap's prior observations + her experiment). With more observations, we can rule out a lot more values by suppressing our degree of belief in them, and we can allocate more of our belief to the values that are more consistent with our priors and with what we observed. It might take a while to appreciate, but this is really elegant philosophically. 
+
+### Moss in an alternative world
+
+I want to show you a different situation, because it is the situation that we will be in for our first try at Bayesian stats. You should graduate from this situation as soon as possible, but to keep things simple for this introduction we're going to follow the situation just this once.
+
+Imagine Mosscap never saw the children flipping the coin ten times. Instead, she just found a coin on the street and got straight to her experiments: she had nothing to base her prior beliefs off of... But she still wants to know the probability of heads. At the outset, she doesn't know whether the probability of heads will be 0, 0.5, or 1, or anything in between.
+
+This is not a problem for us at all, because we can represent our initial belief as a *lack* of knowledge. Again using the $\mathcal{Beta}$ distribution, I plot the lack of knowledge below.
+
+```{r}
+#| fig-width: 4
+#| fig-height: 3
+#| fig-align: "center"
+
+range = seq(0, 1, by = 0.01)
+moss_clueless_prior_flips <- dbeta(range, 1, 1)
+plotter <- data.frame(range, moss_prior_flips)
+
+# plotting
+clueless_flips <- ggplot(
+  plotter,
+  aes(x = range, y = moss_clueless_prior_flips)) +
+geom_line(colour = ocean, alpha = 0.9, size = 1.1) +
+labs(x="Proportion of Heads", y = "Degree of Belief", title = "Initial Beliefs  -  P(h)") +
+theme_bw() +
+my_theme()
+
+clueless_flips
+```
+
+You can see that her degree of belief is equal for every possible proportion of heads: she does not believe in any one proportion over any other. Now suppose she runs through the experiment with her initial belief in *this* world.
+
+```{r}
+#| fig-width: 11
+#| fig-height: 3
+#| fig-align: "center"
+
+moss_clueless_post_flips <- dbeta(range, 1 + 6, 1 + 4)
+
+clueless_post <- ggplot(
+  plotter,
+  aes(x = range, y = moss_clueless_post_flips)) +
+geom_line(colour = haze, alpha = 0.9, size = 1.1) +
+labs(x="Probability of Heads", y = "Degree of Belief", title = "Final Belief - P(h|D)") +
+theme_bw() +
+my_theme()
+
+clueless_flips + data_flips + clueless_post
+```
+
+Everything works out with the same logic. We're still using Bayes Rule and the data distribution and all that. This time though, our belief is much more spread out over possible proportions of heads: there are a lot of proportions we can't rule out, so we can't suppress our degree of belief over them. Again, this makes sense: we have fewer observations.
+
+More than spread, though, is the fact that the *data* is what really determines our final beliefs: the data distribution and the final belief distribution are basically identical. Because we didn't have a very good idea of the proportion to begin with, we don't weigh our initial beliefs very much. Instead, we let the data determine what we should believe. This is all as it should be! If we're clueless at the start, the data is what we should primarily rely on. So Bayesian Inference works exactly as it should.
+
+Everything we do with our Bayesian models: estimating means, standard deviations, effects – all of it will follow fundamentally the same logic as this. When we look at a regression to see what our parameters/coefficients are, this is the process we are following. When we're estimating the means of two groups, or the accuracy of two groups, to compare them to each other, this is the process we are following. If you can get this stuff down, you will understand what your statistical parameters fundamentally mean, and where they come from.
+
+ 
+
+## Measuring Human reasoning with Bayes: Ravens Progressive Matrices
+
+Now, I'm going to some data collected in the Ravens Progressive Matrices task, and use the Bayesian approach to compare the Response Times of two groups: Correct answers, and Incorrect answers. You might know this as a t-test, but Bayesians like to call it a linear regression with a single two-level predictor. You can think of it as a t-test if you like. The key thing to note is that we're predicting response time based on whether someone answered correctly or incorrectly.
+
+Why do this? Well, because they're two variables I have that are easy to work with... but that's no fun, so let's make up a story. It has been found, using much better methods than I will use here, that performance on this task, and "IQ" tests in general, mostly comes down to motivation. In other words, people who score poorly on IQ tests aren't actually 'dumber' (whatever that means), they're just less motivated to do well on the test.
+
+I'm going to make a prediction in line with this *Motivation* hypothesis. I will use Response Time as a measure of motivation (questionable as that is), and predict that people with correct answers are just more motivated. Something that would be consistent with this prediction is if correct answers were associated with longer response times. As you know, the statistical test cannot provide the causality that my prediction is looking for. But it can provide evidence that is *consistent* with my prediction (one problem is that it's also consistent with a whole bunch of other predictions. Nevertheless...)
+
+### Looking at the data
+
+Let's import our data, and take a look at the structure of the data frame.
+
+```{r}
+d <- tibble(read_csv(here::here("mar.csv")))
+```
+
+And let's now focus on our two key variables: response time and correct.
+
+```{r}
+RTCorrectData <- d |>
+select(ResponseTime, Correct) |>
+mutate(Correct = as.character(Correct)) # this was the wrong variable type, this just fixes that.
+head(RTCorrectData)
+```
+
+Before I do any analysis, I should plot my data. There's a few fun ways to plot this (like box plots, dot plots, or violin plots), but because I am only focused on comparing the mean response times between correct and incorrect responses, I am going to do a simple bar graph of means with standard errors.
+
+```{r}
+#| fig-width: 3
+#| fig-height: 3
+#| fig-align: "center"
+
+rtCorrectmeans <- RTCorrectData |> 
+group_by(Correct) |>
+summarise(
+  meanRT = mean(ResponseTime),
+  sErrRT = (sd(ResponseTime)) / sqrt(n())
+) 
+
+rtCorrectmeans |> 
+ggplot(aes(x = Correct, y = meanRT, fill = Correct)) + 
+geom_col(show.legend=FALSE, alpha = 0.8) +
+geom_errorbar(aes(ymin = meanRT - sErrRT, ymax = meanRT + sErrRT), width = 0.05) +
+theme_bw() + 
+my_theme() +
+scale_fill_manual(values = c(dust, lake)) +
+labs(x = "0 = Incorrect, 1 = Correct", y = "Mean Response Time") 
+```
+
+Cool! So from our plot above, we can see that the mean RT is in fact higher for correct, rather than incorrect, answers. This tracks with the motivation hypothesis. Also, because we have lots of data, the standard error around the means are very small – we have good mean estimates.
+
+I'll plot it in another fun way, just so you can see, with a violin and box plot. Look these up if you forgot what they tell you.
+
+```{r}
+#| fig-width: 4
+#| fig-height: 3
+#| fig-align: "center"
+
+RTCorrectData |> 
+ggplot(aes(x = Correct, y = ResponseTime, fill = Correct)) + 
+geom_violin(show.legend=FALSE, alpha = 0.5, color = NA) +
+geom_boxplot(show.legend=FALSE, alpha = 0.9, width = 0.10) +
+theme_bw() + 
+my_theme() +
+scale_fill_manual(values = c(dust, lake)) +
+labs(x = "0 = Incorrect, 1 = Correct", y = "Mean Response Time") 
+```
+
+### Analysis
+
+Ok. So let's use Bayesian Methods to analyse our data. Again: **we are testing whether Response Time differs between Correct vs. Incorrect Responses.** In a way, this is kind of similar to what Mosscap did: you might say that she predicted whether **Proportion differs between Heads vs. Tails.**
+
+While I did things by hand for Mosscap, we don't always have to do things by hand. There are tools for us to use. The tool we use for our analysis is called brms, which stands for Bayesian Regression Models with Stan. You can look it up if you're interested. One big reason we use tools like brms is that we usually can't mathematically derive the posterior (final belief) distribution like we did for Mosscap. The maths becomes too difficult for any human on earth, so we use methods of approximation.
+
+Brms takes the formula for our model, so we'll have to write that down at the outset.
+
+$$
+\text{ResponseTime} \sim \text{Correct}
+$$
+
+This just means: The ResponseTime variable is predicted by the Correct variable (correct/incorrect). It's the same formula that you use for all regression modelling softwares in R. You can just give the formula to brms, and the data frame that you are getting the variables from from. And it takes care of the rest
+
+Here's the magic:
+
+```{r}
+#| output: false
+
+library(brms)
+
+model <- brm(formula = ResponseTime ~ Correct, 
+             data = RTCorrectData)
+```
+
+When you run a model like that yourself, you'll get a bunch of output. Understanding that output is important, but advanced, so let's put it aside for this overview.
+
+Anywho, it's done! So now we can look at our model.
+
+```{r}
+summary(model)
+```
+
+That's it. That's all our statistics done in two lines of code.
+
+First, you'll notice that the model spat out a Coefficient called 'Intercept', which has the value $8916.48$. Where's that come from? See if you can figure it out. Here's a hint: below are the Response Time means that I calculated earlier.
+
+```{r}
+rtCorrectmeans
+```
+
+Mmhmm. The mean RT of Incorrect (0) is close to the Intercept of the model. That's because it IS the intercept of the model! The model is estimating the mean RT of incorrect trials for the intercept – and of course, it's doing it in the same Bayesian way we've been discussing. The intercept is slightly different to the real mean RT for incorrect trials – remember, our model only *approximates* the value, so it's not completely perfect, but it's pretty damn perfect: it's off by less than 10ms.
+
+But looking at the model again, there is another value there:
+
+```{r}
+summary(model)
+```
+
+It says 'Correct1'. But this value is 2972.84: that's certainly not the mean RT of the correct answers – because we saw the mean of the correct answers just a moment ago was $11893$. So check this out: take the mean of the correct answers and subtract it from the incorrect answers.
+
+```{r}
+11893 - 8923
+```
+
+Aha! Yes. This is what the Correct1 regression coefficient means. This is what we actually care about most: an estimate of the difference of RTs between correct and incorrect. So this is the parameter we want.
+
+### Why is the model spitting this stuff out?
+
+Okay, so we can see what the regression coefficients are.. they're the same as always. But what does it mean in a Bayesian context?
+
+Let me say up front, that I'll be interpreting the parameter that is most important for our effect, and putting the intercept aside. However, in real life you really need to interpret the intercept, too. A key reason you need to do that is that you can only really interpret the magnitude of your main effect in reference to the intercept: without a relative comparison, an estimate doesn't really mean anything.
+
+So, isolating our main effect: it's the parameter that gives us the difference between Response Times for correct and incorrect trials. Looking at the model summary we can note the things it gives us for our parameters. It gives us these:
+
+1.  **Estimate:** 2972.84
+2.  **Estimate Error:** 452.58
+3.  **l-95% CI:** 2074.58
+4.  **u-95% CI:** 3837.66
+5.  **Rhat:** 1.00
+6.  **Bulk_ESS:** 4466
+7.  **Tail_ESS:** 2914
+
+### Rhat, Bulk_ESS, Tail_ESS...
+
+Let's start with 5, 6, and 7. These are measures of how well we were able to estimate the parameter, using the approximate methods of Bayesian inference that brms uses. These are kind of like statistical assumptions, and you need to check them for all parameters in your model (for our case, Intercept and Correct1). Rhat should be 1 and Bulk_ESS and Tail_ESS should both be above 400.
+
+### Estimate...
+
+Once you've checked your R-hat, Bulk_ESS and Tail_ESS, you can move on to the parameters that relate to your hypothesis: 1, 2, 3, and 4. We know that Estimate is the estimated difference between the response times, but what's Bayesian about it?
+
+...Let's go back to when Mosscap wanted to investigate the proportion of heads. Remember how she integrated her prior beliefs with the data, to get her final beliefs:
+
+```{r}
+#| fig-width: 12
+#| fig-height: 3
+#| fig-align: "center"
+clueless_flips + data_flips + clueless_post
+```
+
+We are doing the same thing here. And 'Estimate' is from our Final Belief distribution.
+
+But of course, you'll be wondering: what were *our* initial/prior beliefs? We never set those up. The brms package did it for us. Remember that our prior belief, here, is an initial belief in the difference in RT between Correct vs. Incorrect trials. Here it is:
+
+```{r}
+#| fig-width: 4
+#| fig-height: 3
+#| fig-align: "center"
+prior <- ggplot(data.frame(x = c(-3900, 3900)), aes(x)) +
+  geom_hline(yintercept = 1, colour = ocean, size = 1.1, alpha = 0.9) +
+  scale_x_continuous(limits = c(-10000, 10000),
+                     breaks = c(-10000, 0, 10000),
+                     labels = c("\u2212\u221E", "0", "\u221E")) +
+  theme_bw() +
+  my_theme() +
+  labs(x = "Milliseconds Difference",
+       y = "Degree of Belief",
+       title = "Initial Belief - P(h)")
+
+prior
+```
+
+So. That's what we set up as our initial belief: The prior were we know absolutely nothing about the difference between RT for Correct vs. Incorrect trial. By default, this is what brms does.
+
+As an aside, we really shouldn't do this in reality. We are saying that the difference between Correct and Incorrect RT is equally probable to be 0, negative infinity, or positive infinity. Obviously infinite time between Correct and Incorrect is not possible, and 0 time between them is very much possible. So we really shouldn't be telling the model that they're equally probable. This turns out to not be so bad with the type of models we're using here, so long as we have a good amount of data. I'm leaving out information about setting up priors because it's complicated, but worth learning once you've got the stuff in this overview down.
+
+Next, the model takes the data we observe, and turns it into a distribution. Just like we did with Mosscap and her coins. Rememember, what we're showing here is what the *data* implies about the difference in RT between correct and incorrect trials.
+
+```{r}
+#| fig-width: 4
+#| fig-height: 3
+#| fig-align: "center"
+
+est <- fixef(model)["Correct1", "Estimate"]
+se  <- fixef(model)["Correct1", "Est.Error"]
+
+likelihood <- ggplot(data.frame(x = c(est - 4*se, est + 4*se)), aes(x)) +
+stat_function(fun = dnorm, args = list(mean = est, sd = se),
+                colour = matcha, alpha = 0.9, size = 1.1) +
+theme_bw() + 
+my_theme() +
+labs(x = "Milliseconds Difference", y = "Plausibility", title = "The Data  -  P(D|h)")
+likelihood
+```
+
+Like in the coin example, we can then integrate our prior beliefs and our observations to derive our final beliefs, using our old friend:
+
+$$ P(h) \text{ and } P(D|h) \rightarrow P(h|D) $$
+
+At the highest level, this just says that to evaluate how much we should believe in some hypothesis, we combine two things:
+
+1.  Our initial belief in the hypothesis before seeing any data, $P(h)$
+2.  How well our data can be explained by the hypothesis, $P(D|h)$
+
+Our model does this. It's below
+
+```{r}
+#| fig-width: 12
+#| fig-height: 3
+#| fig-align: "center"
+posterior <- ggplot(data.frame(x = c(est - 4*se, est + 4*se)), aes(x)) +
+stat_function(fun = dnorm, args = list(mean = est, sd = se),
+                colour = haze, alpha = 0.9, size = 1.1) +
+theme_bw() + 
+my_theme() +
+labs(x = "Milliseconds Difference", y = "Degree of Belief", title = "Final belief  -  P(h|D)")
+
+prior + likelihood + posterior
+```
+
+So, yeah. I haven't made a mistake in plotting the same distribution twice. The plausible difference in milliseconds implied by our data, and our final beliefs, are identical. The likelihood (the data distribution) *is* the posterior (our final belief). That's because we knew nothing about what the difference was going to be before hand. Consequently, the data completely dominated our estimates, just like Mosscaps prior when she knew nothing about the coins before her experiment.
+
+So finally... 'Estimate' in the regression output just takes the tippy top of the distribution: it's the value that has the highest degree of belief. When we see **Estimate:** 2972.84 in the summary of our model, it is our best guess at the difference in RT between Correct and Incorrect trials. Of course, we come up with this best guess using the Bayesian methods we've talked about so far. It's like Mosscaps best guess of the proportion of heads.
+
+But what was so good about Mosscaps statistics wasn't her 'best guess'.. It was the fact that she was able to assign belief to the whole range of proportions!
+
+It's the same with our analysis. Look at the purple plot above. We have a whole distribution as our belief in the difference between groups in response time. If we report just one value, we're throwing a way *a lot* of information. Indeed, if all we reported was the estimate, we might as well skip this whole statistics thing and report the means on their own. We want to communicate that whole distribution of belief! That's what we do Bayesian Statistics for. So finally, let's look at what our model spits out to summarise the distribution.
+
+### Estimate Error, l-95% CI / u-95% CI
+
+These values all relate to our final belief: the distribution of belief around the mean difference in Response Time between Correct and Incorrect conditions. Let's take a look at the final distribution of belief to sort all of this out.
+
+```{r}
+#| fig-width: 4
+#| fig-height: 3
+#| fig-align: "center"
+posterior
+```
+
+#### Estimate Error
+
+Okay. What's Estimate Error? This is the standard deviation of the posterior belief (final belief). This is very similar to the standard error of the mean in frequentist statistics. Essentially, the standard deviation of the posterior captures how *confident* we are in the mean difference. It gives us a general measure of the values of mean difference that have a high degree of belief over them. Take a look at the plot below to see where the standard deviation estimated by the model stands:
+
+```{r}
+#| fig-width: 4
+#| fig-height: 3
+#| fig-align: "center"
+posterior +
+  geom_vline(xintercept = c(est - se, est + se),
+             colour = blood, linetype = "dashed", alpha = 0.9, size = 0.9)
+```
+
+The space between the two red lines is the standard error. Hopefully you can see why the standard deviation of belief is a nice measure of where our highest degree of belief lies.
+
+### l-95 CI / u-95 CI
+
+These are the 95% *credible intervals* of the posterior. Just like with standard error, but more inclusive, this is a measure of where basically all our degree of belief lies. The 95% credible intervals are saying: 95% of our belief in the value of the mean difference is within this region. Put another way:
+
+**There is a 95% probability that the mean is within this region.**
+
+I put that in bold, because it is a very powerful thing to have when we make statistical decisions. Think about it in terms of the null and alternative hypothesis: if there is a 95% probability that the mean of a group is within this region, and the region does not include 0, we should strongly reject the null hypothesis that the difference between the groups is 0, and accept the alternative hypothesis: that the difference between the groups is not 0.
+
+For intuition, let's plot where the the 95% credible intervals are in our posterior distribution:
+
+```{r}
+#| fig-width: 4
+#| fig-height: 3
+#| fig-align: "center"
+posterior +
+  geom_vline(xintercept = c(2074.21, 3837.66),
+             colour = blood, linetype = "dashed", alpha = 0.9, size = 0.9)
+```
+
+So the space between the red lines is the 95% credible interval.
+
+We can say: there is a 95% probability that the mean difference is between $2074.21$ and $3837.66$.
+
+## Writing up the analysis
+
+To write up the results, we of course explain how we set up and ran the statistical model, then we prove that our methods for approximating the posterior distribution were reliable, and then we describe the posterior distribution (the 'final belief') that our model generated. Here's an example, which you can adapt. I use the terminology 'improper flat priors' to refer to the default brms priors, which incorporate no prior beliefs. That's just what they're called.
+
+------------------------------------------------------------------------
+
+We conducted a Bayesian linear regression (single two-level predictor) using brms (Bürkner, 2017) with improper flat priors over regression coefficients. Response Time was the outcome variable, and Correct/Incorrect answer was the predictor variable.
+
+For all parameters, R̂ values were \< 1.01, indicating reliable posterior sampling. Bulk- and Tail-ESS values exceeded 400, indicating reliable estimates of central tendency and interval bounds, respectively (Vehtari et al., 2021).
+
+The posterior mean difference in Response Times between Correct and Incorrect trials was 2972.8 ms (SD = 452.6), 95% CrI \[2074.2, 3837.7\], with Correct Trials having slower Response Times.
+
+------------------------------------------------------------------------
+
+Citations:
+
+Bürkner, P. C. (2017). brms: An R package for Bayesian multilevel models using Stan. Journal of Statistical Software, 80(1), 1–28. doi: 10.18637/jss.v080.i01
+
+Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021). Rank-normalization, folding, and localization: An improved R̂ for assessing convergence of MCMC. *Bayesian Analysis, 16*(2), 667–718. <https://doi.org/10.1214/20-BA1221>
+
+.
+
+.
+
+.
+
+.
+
+Thanks for reading. If you're interested in learning more about Bayesian Inference, the consensus for the best place to start is 'Statistical Rethinking' by Richard McElreath. You can find the book for free on Anna's Archive, Z-Library, or Library Genesis.
